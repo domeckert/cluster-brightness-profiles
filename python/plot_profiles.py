@@ -17,6 +17,7 @@ from scipy.interpolate import interp1d
 from astropy_healpix import healpy
 import astropy.io.fits as fits
 import numpy as n
+from scipy.stats import scoreatpercentile
 print('Plots the covariance matrix')
 print('------------------------------------------------')
 print('------------------------------------------------')
@@ -26,6 +27,10 @@ t0 = time.time()
 # import all pathes
 
 fig_dir = os.path.join( '/home/comparat/software/cluster-brightness-profiles', 'figures')
+
+pressure_x, pressure_sig_low, pressure_sig_high = n.loadtxt(os.path.join(fig_dir, 'ghirardini_2018_Fig7_pressure.txt'), unpack = True)
+entropy_x, entropy_sig_low, entropy_sig_high = n.loadtxt(os.path.join(fig_dir, 'ghirardini_2018_Fig7_entropy.txt'), unpack = True)
+density_x, density_sig_low, density_sig_high = n.loadtxt(os.path.join(fig_dir, 'ghirardini_2018_Fig7_density.txt'), unpack = True)
 
 path_2_cbp = os.path.join(os.environ['GIT_CBP'])
 N_clu = 1000
@@ -43,51 +48,7 @@ coolfunc=n.loadtxt(os.path.join(path_2_cbp, 'coolfunc.dat'))
 allz_i  = covor[:,len(mean_log)-3]
 allm5_i = covor[:,len(mean_log)-2]
 allkt_i = covor[:,len(mean_log)-1]
-
-X,Y=n.meshgrid(xgrid_ext,xgrid_ext)
-p.figure(0, (6,5))
-p.axes([0.17,0.17,0.75,0.75])
-p.scatter(X, Y, s=185, c=n.flip(covor[:20,:20]),marker='s',vmin=-0.5, vmax=2.5)
-p.colorbar(label='covariance')
-p.xscale('log')
-p.yscale('log')
-p.xlim((xgrid_ext.min()/1.1, xgrid_ext.max()*1.1))
-p.ylim((xgrid_ext.min()/1.1, xgrid_ext.max()*1.1))
-p.xlabel(r'$R/R_{500c}$')
-p.ylabel(r'$R/R_{500c}$')
-p.savefig(os.path.join(fig_dir, 'cov_mat_radii.png'))
-p.clf()
-
-FS = 11
-p.figure(0, (6,5))
-p.imshow(n.flip(covor, axis=1),vmin=-0.5, vmax=2.5)
-p.text(-0.7 , -1.5,'kT', rotation=90, fontsize=FS)#, color='white')
-p.text( 0.5 , -1.5,r'$M_{500c}$', rotation=90, fontsize=FS) #, color='white'
-p.text( 1.5 , -1.5,r'$z$', rotation=90, fontsize=FS)#, color='white')
-
-for jj in n.arange(len(xgrid_ext))[::3]:
-	p.text( 2.5+jj , -1.5, str(n.round(xgrid_ext[jj],3)), fontsize=FS, rotation=90)
-
-for jj in n.arange(len(xgrid_ext))[::3]:
-	p.text( -3.5, 19.5 -jj , str(n.round(xgrid_ext[jj],3)), fontsize=FS)
-
-p.text( -3, 22.5 ,'kT', fontsize=FS)#, color='white')
-p.text( -3, 21.5 ,r'$M_{500c}$', fontsize=FS) #, color='white'
-p.text( -3, 20.5 ,r'$z$', fontsize=FS)#, color='white')
-
-p.text(-0.7 , 24,'kT', rotation=90, fontsize=FS)#, color='white')
-p.text( 0.5 , 25,r'$M_{500c}$', rotation=90, fontsize=FS) #, color='white'
-p.text( 1.5 , 24,r'$z$', rotation=90, fontsize=FS)#, color='white')
-p.text( 11  , 24,r'$R/R_{500c}$', fontsize=14)
-
-p.xticks([])
-p.yticks([])
-p.colorbar(label='covariance')
-p.savefig(os.path.join(fig_dir, 'cov_mat.png'))
-p.clf()
-
 nsim = 1000
-
 
 def calc_lx(prof,kt,m5,z):
 	"""
@@ -134,6 +95,90 @@ cosmoMD = FlatLambdaCDM(
 h = 0.6777
 L_box = 1000.0 / h
 cosmo = cosmoMD
+
+allz     = allz_i    
+allkt    = allkt_i   
+allm5    = allm5_i   
+profiles = profiles_i
+nsim2 = len(allz)
+prf_vals = n.zeros((nsim2,len(xgrid_ext)))
+
+name='all'
+
+p.figure(0, (6,5))
+p.axes([0.17,0.17,0.75,0.75])
+for jj in n.arange(nsim2):
+	prf = profiles[jj]
+	ez2 = cosmo.efunc(allz[jj])**2
+	resfact = n.sqrt(allkt[jj])*n.power(ez2,3./2.)
+	p.plot(xgrid_ext, prf/resfact, color='grey')
+
+#p.colorbar(label='covariance')
+p.xscale('log')
+p.yscale('log')
+p.xlim((xgrid_ext.min()/1.1, xgrid_ext.max()*1.1))
+p.ylim((1e-12, 3e-5))
+p.xlabel(r'$R/R_{500c}$')
+p.ylabel(r'$EM kT^{-1/2} E(z)^{-3}$')
+p.title(name)
+p.savefig(os.path.join(fig_dir, 'profiles_'+name+'.png'))
+p.clf()
+
+p.figure(0, (6,5))
+p.axes([0.17,0.17,0.75,0.75])
+for jj in n.arange(nsim2):
+	prf = profiles[jj]
+	ez2 = cosmo.efunc(allz[jj])**2
+	resfact = n.sqrt(allkt[jj])*n.power(ez2,3./2.)
+	prf_vals[jj] = prf/resfact
+
+for pprr in prf_vals:
+	p.plot(xgrid_ext, n.log10( pprr/n.mean(prf_vals,axis=0)), color='grey', alpha=0.2)
+
+#p.colorbar(label='covariance')
+p.xscale('log')
+#p.yscale('log')
+p.xlim((xgrid_ext.min()/1.1, xgrid_ext.max()*1.1))
+p.ylim((-2, 2))
+p.xlabel(r'$R/R_{500c}$')
+p.ylabel(r'$\log_{10}(EM kT^{-1/2} E(z)^{-3}$/(mean profile))')
+p.title(name)
+p.savefig(os.path.join(fig_dir, 'profiles_div_mean_'+name+'.png'))
+p.clf()
+
+
+normed_profile = n.log10(prf_vals/n.mean(prf_vals,axis=0))
+pcs = n.array([5, 32, 50, 68, 95])
+pc_vals = scoreatpercentile(normed_profile**2, pcs , axis = 0 )**0.5
+
+p.figure(0, (6,5))
+p.axes([0.17,0.17,0.75,0.75])
+#p.fill_between(xgrid_ext, y1 = pc_vals[0], y2 = pc_vals[-1], color='blue', alpha=0.2, label=r'Prf 2$\sigma$')
+p.fill_between(xgrid_ext, y1 = pc_vals[1], y2 = pc_vals[-2], color='blue', alpha=0.3, label=r'Prf 1$\sigma$')
+p.plot(xgrid_ext, pc_vals[2], color='blue', ls='dashed')
+# Ghirardini
+p.fill_between(pressure_x, y1 = pressure_sig_low, y2 = pressure_sig_high, color='g', alpha=0.4, label='Gh20 P')
+p.fill_between(entropy_x, y1 = entropy_sig_low, y2 = entropy_sig_high, color='k', alpha=0.4, label='Gh20 E')
+p.fill_between(density_x, y1 = density_sig_low, y2 = density_sig_high, color='r', alpha=0.4, label='Gh20 D')
+p.xscale('log')
+#p.yscale('log')
+p.xlim((xgrid_ext.min()/1.1, xgrid_ext.max()*1.1))
+p.legend(loc=0)
+p.grid()
+#p.ylim((1e-12, 3e-5))
+p.xlabel(r'$R/R_{500c}$')
+p.ylabel('intrinsic scatter')#r'$\sigma(\log_{10}(EM kT^{-1/2} E(z)^{-3}$/(mean profile)))')
+p.title(name)
+p.savefig(os.path.join(fig_dir, 'profiles_std_'+name+'.png'))
+p.clf()
+
+
+
+
+
+
+
+sys.exit()
 
 m_low = (n.log10(allm5_i)>=13.5) & (n.log10(allm5_i)<14.0)
 m_mid = (n.log10(allm5_i)>=14.0) & (n.log10(allm5_i)<14.5)
@@ -220,6 +265,7 @@ for in_zbin, name in zip(selections, selection_names):
 	allm5    = allm5_i   [in_zbin]
 	profiles = profiles_i[in_zbin]
 	nsim2 = len(allz)
+	prf_vals = n.zeros((nsim2,len(xgrid_ext)))
 	if nsim2>0:
 		p.figure(0, (6,5))
 		p.axes([0.17,0.17,0.75,0.75])
@@ -238,4 +284,25 @@ for in_zbin, name in zip(selections, selection_names):
 		p.ylabel(r'$EM kT^{-1/2} E(z)^{-3}$')
 		p.title(name)
 		p.savefig(os.path.join(fig_dir, 'profiles_'+name+'.png'))
+		p.clf()
+
+		p.figure(0, (6,5))
+		p.axes([0.17,0.17,0.75,0.75])
+		for jj in n.arange(nsim2):
+			prf = profiles[jj]
+			ez2 = cosmo.efunc(allz[jj])**2
+			resfact = n.sqrt(allkt[jj])*n.power(ez2,3./2.)
+			prf_vals[jj] = prf/resfact
+		
+		p.plot(xgrid_ext, n.std(prf_vals, axis=0), color='grey')
+
+		#p.colorbar(label='covariance')
+		p.xscale('log')
+		p.yscale('log')
+		p.xlim((xgrid_ext.min()/1.1, xgrid_ext.max()*1.1))
+		p.ylim((1e-12, 3e-5))
+		p.xlabel(r'$R/R_{500c}$')
+		p.ylabel(r'$EM kT^{-1/2} E(z)^{-3}$')
+		p.title(name)
+		p.savefig(os.path.join(fig_dir, 'profiles_scatter_'+name+'.png'))
 		p.clf()
